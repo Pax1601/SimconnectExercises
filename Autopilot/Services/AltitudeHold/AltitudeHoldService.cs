@@ -227,9 +227,9 @@ public sealed class AltitudeHoldService(ILogger<AltitudeHoldService> logger) : I
         };
 
         // Data definitions
-        foreach (var (request, definition, unit, datatype, period) in AltitudeHoldStateConstants.DataDefinitions)
+        foreach (var (request, definition, name, unit, datatype, period) in AltitudeHoldStateConstants.DataDefinitions)
         {
-            _simConnect.AddToDataDefinition(definition, definition.ToString(), unit, datatype, 0.0f, 0u);
+            _simConnect.AddToDataDefinition(definition, name, unit, datatype, 0.0f, 0u);
             _simConnect.RegisterDataDefineStruct<double>(definition);
             _simConnect.RequestDataOnSimObject(request, definition, SimConnect.SIMCONNECT_OBJECT_ID_USER, period, SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT, 0u, 0u, 0u);
         }

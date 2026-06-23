@@ -70,14 +70,14 @@ public sealed class AltitudeHoldStateConstants
         AltitudeHold = 1
     }
 
-    public static (Enum, Enum, string, SIMCONNECT_DATATYPE, SIMCONNECT_PERIOD)[] DataDefinitions { get; set; } = new (Enum, Enum, string, SIMCONNECT_DATATYPE, SIMCONNECT_PERIOD)[]
+    public static (Enum, Enum, string, string, SIMCONNECT_DATATYPE, SIMCONNECT_PERIOD)[] DataDefinitions { get; set; } = new (Enum, Enum, string, string, SIMCONNECT_DATATYPE, SIMCONNECT_PERIOD)[]
     {
-        (Requests.Altitude, Definitions.Altitude, "feet", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SIM_FRAME),
-        (Requests.Roll, Definitions.Roll, "degrees", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SIM_FRAME),
-        (Requests.Airspeed, Definitions.Airspeed, "knots", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SIM_FRAME),
-        (Requests.VerticalSpeed, Definitions.VerticalSpeed, "feet per second", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SIM_FRAME),
-        (Requests.Throttle, Definitions.Throttle, "percent", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SECOND),
-        (Requests.ElevatorTrim, Definitions.ElevatorTrim, "percent", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SECOND),
-        (Requests.AileronTrim, Definitions.AileronTrim, "percent", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SECOND)
+        (Requests.Altitude, Definitions.Altitude, "PLANE ALTITUDE", "feet", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SIM_FRAME),
+        (Requests.Roll, Definitions.Roll, "PLANE BANK DEGREES", "degrees", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SIM_FRAME),
+        (Requests.Airspeed, Definitions.Airspeed, "AIRSPEED INDICATED", "knots", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SIM_FRAME),
+        (Requests.VerticalSpeed, Definitions.VerticalSpeed, "VERTICAL SPEED", "feet per minute", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SIM_FRAME),
+        (Requests.Throttle, Definitions.Throttle, "GENERAL ENG THROTTLE LEVER POSITION:1", "percent", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SECOND),
+        (Requests.ElevatorTrim, Definitions.ElevatorTrim, "ELEVATOR TRIM POSITION", "degrees", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SECOND),
+        (Requests.AileronTrim, Definitions.AileronTrim, "AILERON TRIM POSITION", "degrees", SIMCONNECT_DATATYPE.FLOAT64, SIMCONNECT_PERIOD.SECOND)
     };
 }
