@@ -68,6 +68,10 @@ class AltitudeHoldClient {
             this.setAltitudeHoldTarget(e),
         );
 
+        this.UIElements.altitudeHoldTarget.addEventListener("input", (e) => {
+            this.UIElements.altitudeHoldTarget.focus();
+        });
+
         // Add event listeners to the PID parameter input fields
         [
             this.UIElements.elevatorTrimKd,
@@ -168,7 +172,7 @@ class AltitudeHoldClient {
     // Update the UI with the Altitude Hold state received from the server.
     applyAltitudeHoldState(altitudeHoldState) {
         this.UIElements.altitudeValue.textContent =
-            altitudeHoldState.altitude.toFixed(2);
+            altitudeHoldState.altitude.toFixed(2) + " feet";
         this.UIElements.throttleValue.textContent =
             altitudeHoldState.throttlePosition.toFixed(1) + "%";
         this.UIElements.elevatorTrimValue.textContent =
