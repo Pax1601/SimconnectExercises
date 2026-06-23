@@ -239,7 +239,7 @@ class AltitudeHoldClient {
         this.drawGraph(
             this.UIElements.altitudeGraph,
             this.altitudeData,
-            "Altitude",
+            "Altitude [feet] (referenced to target value)",
             "blue",
             altitudeHoldState.targetAltitude - 1000,
             altitudeHoldState.targetAltitude + 1000,
@@ -249,7 +249,7 @@ class AltitudeHoldClient {
         this.drawGraph(
             this.UIElements.climbAngleGraph,
             this.climbAngleData,
-            "Climb Angle",
+            "Climb Angle [degrees] (referenced to target value)",
             "orange",
             altitudeHoldState.targetClimbAngle - 10,
             altitudeHoldState.targetClimbAngle + 10,
