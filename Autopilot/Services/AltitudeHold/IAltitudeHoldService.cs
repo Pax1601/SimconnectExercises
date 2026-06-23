@@ -4,7 +4,6 @@ namespace Autopilot.Services.AltitudeHold;
 
 public interface IAltitudeHoldService
 {
-    bool IsConnected { get; }
     Task ConnectAsync(CancellationToken cancellationToken);
     Task DisconnectAsync(CancellationToken cancellationToken);
     Task<SimulatorState> GetStateAsync(CancellationToken cancellationToken);

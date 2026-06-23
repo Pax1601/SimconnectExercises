@@ -9,19 +9,8 @@ public sealed class AltitudeHoldService(ILogger<AltitudeHoldService> logger) : I
     private readonly Lock _sync = new();
     private AutoResetEvent? _messageReceivedEvent;
     private SimConnect? _simConnect;
-    const int WM_USER_SIMCONNECT = 0x0402;  // Copied from SimConnect documentation, TODO: Understand what this does.
+    const int WM_USER_SIMCONNECT = 0x0402;  // Copied from SimConnect documentation, TODO: Understand what this does. @Ben: what is the usage of this ID?
     private SimulatorState _currentState = new SimulatorState();
-
-    public bool IsConnected
-    {
-        get
-        {
-            lock (_sync)
-            {
-                return _currentState.IsConnected;
-            }
-        }
-    }
 
     public Task ConnectAsync(CancellationToken cancellationToken)
     {
@@ -34,209 +23,21 @@ public sealed class AltitudeHoldService(ILogger<AltitudeHoldService> logger) : I
                 return Task.CompletedTask;
             }
 
+            // Get SimConnect ready by creating a new instance and setting up event handlers.
             try
             {
                 _messageReceivedEvent = new AutoResetEvent(false);
-                _simConnect = new SimConnect("Autopilot Exercise", 0, WM_USER_SIMCONNECT, _messageReceivedEvent, 0);
+                _simConnect = new SimConnect("Autopilot Service", 0, WM_USER_SIMCONNECT, _messageReceivedEvent, 0);
                 _currentState.IsConnected = true;
                 logger.LogInformation("SimConnect connected successfully.");
 
-                // Event handlers must be attached before requests start producing data.
-                _simConnect.OnRecvSimobjectData += OnRecvSimobjectData;
-                _simConnect.OnRecvOpen += (s, e) =>
-                {
-                    logger.LogInformation("SimConnect connection opened.");
-                    _currentState.IsConnected = true;
-                };
-                _simConnect.OnRecvQuit += (s, e) =>
-                {
-                    logger.LogInformation("SimConnect connection closed by simulator.");
-                    _currentState.IsConnected = false;
-                };
-                _simConnect.OnRecvException += (s, e) =>
-                {
-                    logger.LogError("SimConnect exception received: {Exception}", e.dwException);
-                };
-
-                // Listen for system events to track simulation state.
-                _simConnect.OnRecvEvent += (s, e) =>
-                {
-                    if ((AltitudeHoldState.Events)e.uEventID == AltitudeHoldState.Events.Start)
-                    {
-                        logger.LogInformation("Simulation started.");
-                        _currentState.SimulationRunning = true;
-                    }
-                    else if ((AltitudeHoldState.Events)e.uEventID == AltitudeHoldState.Events.Stop)
-                    {
-                        logger.LogInformation("Simulation stopped.");
-                        // Disable altitude hold when the simulation stops to avoid unexpected behavior.
-                        DeactivateAltitudeHoldAsync(CancellationToken.None).Wait();
-                        _currentState.SimulationRunning = false;
-                    }
-                };
-
-                // Data definitions
-                _simConnect.AddToDataDefinition(
-                    AltitudeHoldState.Definitions.Altitude,
-                    "PLANE ALTITUDE",
-                    "feet",
-                    SIMCONNECT_DATATYPE.FLOAT64,
-                    0.0f,
-                    0u);
-                _simConnect.AddToDataDefinition(
-                AltitudeHoldState.Definitions.Roll,
-                    "PLANE BANK DEGREES",
-                    "degrees",
-                    SIMCONNECT_DATATYPE.FLOAT64,
-                    0.0f,
-                    0u);
-                _simConnect.AddToDataDefinition(
-                    AltitudeHoldState.Definitions.Airspeed,
-                    "AIRSPEED INDICATED",
-                    "knots",
-                    SIMCONNECT_DATATYPE.FLOAT64,
-                    0.0f,
-                    0u);
-                _simConnect.AddToDataDefinition(
-                    AltitudeHoldState.Definitions.VerticalSpeed,
-                    "VERTICAL SPEED",
-                    "feet per minute",
-                    SIMCONNECT_DATATYPE.FLOAT64,
-                    0.0f,
-                    0u);
-                _simConnect.AddToDataDefinition(
-                    AltitudeHoldState.Definitions.Throttle,
-                    "GENERAL ENG THROTTLE LEVER POSITION:1",
-                    "percent",
-                    SIMCONNECT_DATATYPE.FLOAT64,
-                    0.0f,
-                    0u);
-                _simConnect.AddToDataDefinition(
-                    AltitudeHoldState.Definitions.ElevatorTrim,
-                    "ELEVATOR TRIM POSITION",
-                    "degrees",
-                    SIMCONNECT_DATATYPE.FLOAT64,
-                    0.0f,
-                    0u);
-                _simConnect.AddToDataDefinition(
-                    AltitudeHoldState.Definitions.AileronTrim,
-                    "AILERON TRIM POSITION",
-                    "degrees",
-                    SIMCONNECT_DATATYPE.FLOAT64,
-                    0.0f,
-                    0u);
-                _simConnect.RegisterDataDefineStruct<double>(AltitudeHoldState.Definitions.Altitude);
-                _simConnect.RegisterDataDefineStruct<double>(AltitudeHoldState.Definitions.Roll);
-                _simConnect.RegisterDataDefineStruct<double>(AltitudeHoldState.Definitions.Airspeed);
-                _simConnect.RegisterDataDefineStruct<double>(AltitudeHoldState.Definitions.VerticalSpeed);
-                _simConnect.RegisterDataDefineStruct<double>(AltitudeHoldState.Definitions.Throttle);
-                _simConnect.RegisterDataDefineStruct<double>(AltitudeHoldState.Definitions.ElevatorTrim);
-                _simConnect.RegisterDataDefineStruct<double>(AltitudeHoldState.Definitions.AileronTrim);
-
-                // Data requests
-                // Note: Altitude and roll are requested every frame. The main PID loop is tied to this frequency. TODO: Are there better approaches?
-                // Other values are requested every second, since we will enforce them, so it is more of a "sanity check" than anything else.
-                _simConnect.RequestDataOnSimObject(
-                    AltitudeHoldState.Requests.Altitude,
-                    AltitudeHoldState.Definitions.Altitude,
-                    SimConnect.SIMCONNECT_OBJECT_ID_USER,
-                    SIMCONNECT_PERIOD.SIM_FRAME,
-                    SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT,
-                     0u,
-                     0u,
-                     0u
-                    );
-                _simConnect.RequestDataOnSimObject(
-                    AltitudeHoldState.Requests.Roll,
-                    AltitudeHoldState.Definitions.Roll,
-                    SimConnect.SIMCONNECT_OBJECT_ID_USER,
-                    SIMCONNECT_PERIOD.SIM_FRAME,
-                    SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT,
-                     0u,
-                     0u,
-                     0u
-                    );
-                _simConnect.RequestDataOnSimObject(
-                    AltitudeHoldState.Requests.Airspeed,
-                    AltitudeHoldState.Definitions.Airspeed,
-                    SimConnect.SIMCONNECT_OBJECT_ID_USER,
-                    SIMCONNECT_PERIOD.SIM_FRAME,
-                    SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT,
-                     0u,
-                     0u,
-                     0u
-                    );
-                _simConnect.RequestDataOnSimObject(
-                    AltitudeHoldState.Requests.VerticalSpeed,
-                    AltitudeHoldState.Definitions.VerticalSpeed,
-                    SimConnect.SIMCONNECT_OBJECT_ID_USER,
-                    SIMCONNECT_PERIOD.SIM_FRAME,
-                    SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT,
-                     0u,
-                     0u,
-                     0u
-                    );
-                _simConnect.RequestDataOnSimObject(
-                    AltitudeHoldState.Requests.Throttle,
-                    AltitudeHoldState.Definitions.Throttle,
-                    SimConnect.SIMCONNECT_OBJECT_ID_USER,
-                    SIMCONNECT_PERIOD.SECOND,
-                    SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT,
-                     0u,
-                     0u,
-                     0u
-                    );
-                _simConnect.RequestDataOnSimObject(
-                    AltitudeHoldState.Requests.ElevatorTrim,
-                    AltitudeHoldState.Definitions.ElevatorTrim,
-                    SimConnect.SIMCONNECT_OBJECT_ID_USER,
-                    SIMCONNECT_PERIOD.SECOND,
-                    SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT,
-                     0u,
-                     0u,
-                     0u
-                    );
-                _simConnect.RequestDataOnSimObject(
-                    AltitudeHoldState.Requests.AileronTrim,
-                    AltitudeHoldState.Definitions.AileronTrim,
-                    SimConnect.SIMCONNECT_OBJECT_ID_USER,
-                    SIMCONNECT_PERIOD.SECOND,
-                    SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT,
-                     0u,
-                     0u,
-                     0u
-                    );
-
-                // System events
-                _simConnect.SubscribeToSystemEvent(AltitudeHoldState.Events.Start, "SimStart");
-                _simConnect.SubscribeToSystemEvent(AltitudeHoldState.Events.Stop, "SimStop");
-
-                // Input events
-                _simConnect.MapClientEventToSimEvent(AltitudeHoldState.Events.SetElevatorTrim, "ELEVATOR_TRIM_SET");
-                _simConnect.MapClientEventToSimEvent(AltitudeHoldState.Events.SetAileronTrim, "AILERON_TRIM_SET");
-                _simConnect.MapClientEventToSimEvent(AltitudeHoldState.Events.SetThrottle, "THROTTLE_SET");
-
-                // Register group and set priority for the events
-                _simConnect.AddClientEventToNotificationGroup(AltitudeHoldState.Groups.AltitudeHold, AltitudeHoldState.Events.SetElevatorTrim, false);
-                _simConnect.AddClientEventToNotificationGroup(AltitudeHoldState.Groups.AltitudeHold, AltitudeHoldState.Events.SetAileronTrim, false);
-                _simConnect.AddClientEventToNotificationGroup(AltitudeHoldState.Groups.AltitudeHold, AltitudeHoldState.Events.SetThrottle, false);
-                _simConnect.SetNotificationGroupPriority(AltitudeHoldState.Groups.AltitudeHold, SimConnect.SIMCONNECT_GROUP_PRIORITY_HIGHEST);
-
-                // Initialize the PID controllers with default values. These can be adjusted later via the web interface.
-                _currentState.AltitudeHoldState.ElevatorTrimPID.Kp = 500e-4;
-                _currentState.AltitudeHoldState.ElevatorTrimPID.Ki = 80e-4;
-                _currentState.AltitudeHoldState.ElevatorTrimPID.Kd = 300e-4;
-                _currentState.AltitudeHoldState.ElevatorTrimPID.AntiWindupMin = -1e2;
-                _currentState.AltitudeHoldState.ElevatorTrimPID.AntiWindupMax = 1e2;
-
-                _currentState.AltitudeHoldState.AileronTrimPID.Kp = -6e-4;
-                _currentState.AltitudeHoldState.AileronTrimPID.Ki = 0e-4;
-                _currentState.AltitudeHoldState.AileronTrimPID.Kd = -1e-4;
-
-                logger.LogInformation("SimConnect data definitions and requests set up successfully.");
+                // Get SimConnect ready by registering data definitions and requests and all that jazz
+                SetupSimConnect();
             }
             catch (COMException ex)
             {
+                // Logging as debug since usually this means MSFS is not running.
+                logger.LogDebug(ex, "SimConnect connection failed with COMException.");
                 logger.LogWarning("SimConnect connection failed.");
             }
         }
@@ -256,6 +57,7 @@ public sealed class AltitudeHoldService(ILogger<AltitudeHoldService> logger) : I
             }
 
             // Dispose SimConnect instance and release resources.
+            // @Ben: Is this the correct way to clean up SimConnect? I am not sure if I need to unsubscribe from events or do anything else.
             _simConnect?.Dispose();
             _simConnect = null;
             _messageReceivedEvent?.Dispose();
@@ -318,25 +120,27 @@ public sealed class AltitudeHoldService(ILogger<AltitudeHoldService> logger) : I
         cancellationToken.ThrowIfCancellationRequested();
         lock (_sync)
         {
-
-            if (controllerName.Equals("elevatorTrim", StringComparison.OrdinalIgnoreCase))
+            PID? pidController = controllerName.ToLower() switch
             {
-                _currentState.AltitudeHoldState.ElevatorTrimPID.Kp = Kp;
-                _currentState.AltitudeHoldState.ElevatorTrimPID.Ki = Ki;
-                _currentState.AltitudeHoldState.ElevatorTrimPID.Kd = Kd;
-                logger.LogInformation("Elevator PID parameters updated: Kp={Kp}, Ki={Ki}, Kd={Kd}", Kp, Ki, Kd);
-            }
-            else if (controllerName.Equals("aileronTrim", StringComparison.OrdinalIgnoreCase))
-            {
-                _currentState.AltitudeHoldState.AileronTrimPID.Kp = Kp;
-                _currentState.AltitudeHoldState.AileronTrimPID.Ki = Ki;
-                _currentState.AltitudeHoldState.AileronTrimPID.Kd = Kd;
-                logger.LogInformation("Aileron PID parameters updated: Kp={Kp}, Ki={Ki}, Kd={Kd}", Kp, Ki, Kd);
-            }
-            else
+                "elevatortrim" => _currentState.AltitudeHoldState.ElevatorTrimPID as PID,
+                "aileronstrim" => _currentState.AltitudeHoldState.AileronTrimPID as PID,
+                _ => null
+            };
+            
+            if (pidController == null)
             {
                 logger.LogWarning("Unknown controller name '{ControllerName}' for PID parameter update.", controllerName);
+                return Task.CompletedTask;
             }
+
+            // Reset the PID controller to avoid any accumulated error from previous runs.
+            pidController?.Reset(); 
+
+            // Apply the new PID parameters
+            pidController?.Kp = Kp;
+            pidController?.Ki = Ki;
+            pidController?.Kd = Kd;
+            logger.LogInformation("PID parameters for {ControllerName} updated: Kp={Kp}, Ki={Ki}, Kd={Kd}.", controllerName, Kp, Ki, Kd);
 
         }
         return Task.CompletedTask;
@@ -349,15 +153,18 @@ public sealed class AltitudeHoldService(ILogger<AltitudeHoldService> logger) : I
             while (!cancellationToken.IsCancellationRequested)
             {
                 // Periodically check for SimConnect connection and run dispatch loop until cancellation is requested.
-                while (!IsConnected)
+                while (!_currentState.IsConnected)
                 {
                     logger.LogInformation("Waiting for SimConnect connection...");
                     await ConnectAsync(cancellationToken);
                     await Task.Delay(1000, cancellationToken);
                 }
 
-                if (IsConnected)
+                if (_currentState.IsConnected)
                 {
+                    // @Ben: Is this the proper way to handle the message loop? The system is event driven but this feels like polling.
+                    // Is it correct to assume that this if statement will remain true until all messages in the queue are processed?
+                    // If so is there a risk of locking forever is the sim is sending events faster that we can process them for any reason?
                     if (_messageReceivedEvent?.WaitOne(50) == true)
                     {
                         _simConnect?.ReceiveMessage();
@@ -377,19 +184,111 @@ public sealed class AltitudeHoldService(ILogger<AltitudeHoldService> logger) : I
         }
     }
 
+    private void SetupSimConnect()
+    {
+        if (_simConnect == null)
+        {
+            logger.LogError("SimConnect is not initialized. Cannot set up data definitions and requests.");
+            return;
+        }
+
+        // Attach system events
+        _simConnect.OnRecvSimobjectData += OnRecvSimobjectData;
+        _simConnect.OnRecvOpen += (s, e) =>
+        {
+            logger.LogInformation("SimConnect connection opened.");
+            _currentState.IsConnected = true;
+        };
+        _simConnect.OnRecvQuit += (s, e) =>
+        {
+            logger.LogInformation("SimConnect connection closed by simulator.");
+            _currentState.IsConnected = false;
+        };
+        _simConnect.OnRecvException += (s, e) =>
+        {
+            logger.LogError("SimConnect exception received: {Exception}", e.dwException);
+        };
+
+        // Listen for system events to track simulation state.
+        _simConnect.OnRecvEvent += (s, e) =>
+        {
+            if ((AltitudeHoldStateConstants.Events)e.uEventID == AltitudeHoldStateConstants.Events.Start)
+            {
+                logger.LogInformation("Simulation started.");
+                _currentState.SimulationRunning = true;
+            }
+            else if ((AltitudeHoldStateConstants.Events)e.uEventID == AltitudeHoldStateConstants.Events.Stop)
+            {
+                logger.LogInformation("Simulation stopped.");
+                // Disable altitude hold when the simulation stops to avoid unexpected behavior.
+                DeactivateAltitudeHoldAsync(CancellationToken.None).Wait();
+                _currentState.SimulationRunning = false;
+            }
+        };
+
+        // Data definitions
+        foreach (var (request, definition, unit, datatype, period) in AltitudeHoldStateConstants.DataDefinitions)
+        {
+            _simConnect.AddToDataDefinition(definition, definition.ToString(), unit, datatype, 0.0f, 0u);
+            _simConnect.RegisterDataDefineStruct<double>(definition);
+            _simConnect.RequestDataOnSimObject(request, definition, SimConnect.SIMCONNECT_OBJECT_ID_USER, period, SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT, 0u, 0u, 0u);
+        }
+
+        // System events
+        _simConnect.SubscribeToSystemEvent(AltitudeHoldStateConstants.Events.Start, "SimStart");
+        _simConnect.SubscribeToSystemEvent(AltitudeHoldStateConstants.Events.Stop, "SimStop");
+
+        // Input events
+        _simConnect.MapClientEventToSimEvent(AltitudeHoldStateConstants.Events.SetElevatorTrim, "ELEVATOR_TRIM_SET");
+        _simConnect.MapClientEventToSimEvent(AltitudeHoldStateConstants.Events.SetAileronTrim, "AILERON_TRIM_SET");
+        _simConnect.MapClientEventToSimEvent(AltitudeHoldStateConstants.Events.SetThrottle, "THROTTLE_SET"); // Not used yet
+
+        // Register group and set priority for the events
+        _simConnect.AddClientEventToNotificationGroup(AltitudeHoldStateConstants.Groups.AltitudeHold, AltitudeHoldStateConstants.Events.SetElevatorTrim, false);
+        _simConnect.AddClientEventToNotificationGroup(AltitudeHoldStateConstants.Groups.AltitudeHold, AltitudeHoldStateConstants.Events.SetAileronTrim, false);
+        _simConnect.AddClientEventToNotificationGroup(AltitudeHoldStateConstants.Groups.AltitudeHold, AltitudeHoldStateConstants.Events.SetThrottle, false); // Not used yet
+        _simConnect.SetNotificationGroupPriority(AltitudeHoldStateConstants.Groups.AltitudeHold, SimConnect.SIMCONNECT_GROUP_PRIORITY_HIGHEST);
+
+        logger.LogInformation("SimConnect data definitions and requests set up successfully.");
+    }
+
     private void OnRecvSimobjectData(SimConnect sender, SIMCONNECT_RECV_SIMOBJECT_DATA data)
     {
         lock (_sync)
         {
             _currentState.LastUpdatedUtc = DateTimeOffset.UtcNow;
 
-            // Update the appropriate state property based on the request ID.
-            if ((AltitudeHoldState.Requests)data.dwRequestID == AltitudeHoldState.Requests.Altitude)
+            // Update the appropriate state property based on the definition ID.
+            switch ((AltitudeHoldStateConstants.Definitions)data.dwDefineID)
             {
-                var altitude = (double)data.dwData[0];
-                _currentState.AltitudeHoldState.Altitude = altitude;
+                case AltitudeHoldStateConstants.Definitions.Altitude:
+                    _currentState.AltitudeHoldState.Altitude = (double)data.dwData[0];
+                    break;
+                case AltitudeHoldStateConstants.Definitions.Roll:
+                    _currentState.AltitudeHoldState.Roll = (double)data.dwData[0];
+                    break;
+                case AltitudeHoldStateConstants.Definitions.Airspeed:
+                    _currentState.AltitudeHoldState.Airspeed = (double)data.dwData[0];
+                    break;
+                case AltitudeHoldStateConstants.Definitions.VerticalSpeed:
+                    _currentState.AltitudeHoldState.VerticalSpeed = (double)data.dwData[0];
+                    break;
+                case AltitudeHoldStateConstants.Definitions.Throttle:
+                    _currentState.AltitudeHoldState.ThrottlePosition = (double)data.dwData[0];
+                    break;
+                case AltitudeHoldStateConstants.Definitions.ElevatorTrim:
+                    _currentState.AltitudeHoldState.ElevatorTrimPosition = (double)data.dwData[0];
+                    break;
+                case AltitudeHoldStateConstants.Definitions.AileronTrim:
+                    _currentState.AltitudeHoldState.AileronTrimPosition = (double)data.dwData[0];
+                    break;
+            }
 
+            // The main control loop is triggered by the Altitude data definition, which is updated at a regular interval.
+            if ((AltitudeHoldStateConstants.Requests)data.dwRequestID == AltitudeHoldStateConstants.Requests.Altitude)
+            {
                 // Update the delta time for the PID loop
+                // @Ben: right now I am using the system time to compute delta time. Can we get a more accurate delta time from the sim?
                 double currentEpochTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0; // Convert milliseconds to seconds
 
                 // If this is the first time we're receiving data, initialize LastEpochTime to avoid a large delta time.
@@ -401,36 +300,6 @@ public sealed class AltitudeHoldService(ILogger<AltitudeHoldService> logger) : I
                 _currentState.AltitudeHoldState.LastEpochTime = currentEpochTime;
 
                 ControlLoop();  // <----- MAIN PID LOOP
-            }
-            if ((AltitudeHoldState.Requests)data.dwRequestID == AltitudeHoldState.Requests.Roll)
-            {
-                var roll = (double)data.dwData[0];
-                _currentState.AltitudeHoldState.Roll = roll;
-            }
-            if ((AltitudeHoldState.Requests)data.dwRequestID == AltitudeHoldState.Requests.Airspeed)
-            {
-                var airspeed = (double)data.dwData[0];
-                _currentState.AltitudeHoldState.Airspeed = airspeed;
-            }
-            if ((AltitudeHoldState.Requests)data.dwRequestID == AltitudeHoldState.Requests.VerticalSpeed)
-            {
-                var verticalSpeed = (double)data.dwData[0];
-                _currentState.AltitudeHoldState.VerticalSpeed = verticalSpeed;
-            }
-            else if ((AltitudeHoldState.Requests)data.dwRequestID == AltitudeHoldState.Requests.Throttle)
-            {
-                var throttle = (double)data.dwData[0];
-                _currentState.AltitudeHoldState.ThrottlePosition = throttle;
-            }
-            else if ((AltitudeHoldState.Requests)data.dwRequestID == AltitudeHoldState.Requests.ElevatorTrim)
-            {
-                var elevatorTrim = (double)data.dwData[0];
-                _currentState.AltitudeHoldState.ElevatorTrimPosition = elevatorTrim;
-            }
-            else if ((AltitudeHoldState.Requests)data.dwRequestID == AltitudeHoldState.Requests.AileronTrim)
-            {
-                var aileronTrim = (double)data.dwData[0];
-                _currentState.AltitudeHoldState.AileronTrimPosition = aileronTrim;
             }
         }
     }
@@ -449,34 +318,26 @@ public sealed class AltitudeHoldService(ILogger<AltitudeHoldService> logger) : I
             _currentState.AltitudeHoldState.AltitudeError = altitudeError;
 
             // Compute the desired climb/descent angle based on the altitude error
-            // Simple proportional mapping of altitude error to climb angle.
+            // To smoothly intercept the target altitude use an arctangent function.
             double newClimbAngle = Converters.RadiansToDegrees(Math.Atan2(altitudeError, 1000));
 
-            double smoothFactor; 
-            if (Math.Abs(newClimbAngle) < 1) 
-            {
-                // If the new climb angle is small, set it faster to avoid overshooting.
-                smoothFactor = 0.99;
-            }
-            else
-            {
-                // If the new climb angle is larger, apply a smoothing factor to avoid abrupt changes. 
-                // This helps avoiding passengers puke :D
-                smoothFactor = 0.999;
-            }
-
+            // If the new climb angle is small, set it faster to avoid overshooting.
+            // If the new climb angle is larger, apply a smoothing factor to avoid abrupt changes. 
+            // This helps avoiding passengers puke :D
+            double smoothFactor = Math.Abs(newClimbAngle) < 1 ? 0.99 : 0.999;
             _currentState.AltitudeHoldState.TargetClimbAngle = smoothFactor * _currentState.AltitudeHoldState.TargetClimbAngle + (1-smoothFactor) * newClimbAngle;
 
-            // Limit the angle to a reasonable range to avoid excessive control inputs
+            // Limit the angle to a reasonable range to avoid excessive control inputs and to avoid stall/overspeed.
             _currentState.AltitudeHoldState.TargetClimbAngle = Math.Clamp(_currentState.AltitudeHoldState.TargetClimbAngle, -5, 5);
+
             // Compute the climb angle error
             double climbAngleError = _currentState.AltitudeHoldState.TargetClimbAngle - _currentState.AltitudeHoldState.ClimbAngle;
 
-            // Update PID to maintain altitude
+            // Update PID to maintain the target climb angle
             _currentState.AltitudeHoldState.ElevatorTrimPID.Update(climbAngleError, _currentState.AltitudeHoldState.DeltaTime);
             double elevatorTrimOutput = _currentState.AltitudeHoldState.ElevatorTrimPID.ComputeOutput();
 
-            // Scale the elevator trim with speed. More speed = less elevator trim.
+            // Scale the elevator trim with speed. More speed = less elevator trim. This is very rough, it would be better to know the correct trim value for the current speed.
             elevatorTrimOutput /= Math.Max(1.0, _currentState.AltitudeHoldState.Airspeed / 100.0);
 
             // Scale output to match SimConnect's expected range for control surfaces
@@ -484,11 +345,12 @@ public sealed class AltitudeHoldService(ILogger<AltitudeHoldService> logger) : I
 
             // Use the ELEVATOR_TRIM_SET Event to set the elevator trim position
             // From what I can tell from the SDK, the value is expected to be in the range of -16384 to 16384. TransmitClientEvent expects a uint, so we need to cast it.
+            // Ben: is this correct?
             _simConnect?.TransmitClientEvent(
                 SimConnect.SIMCONNECT_OBJECT_ID_USER,
-                AltitudeHoldState.Events.SetElevatorTrim,
+                AltitudeHoldStateConstants.Events.SetElevatorTrim,
                 (uint)normalizedElevatorTrimOutput,
-                AltitudeHoldState.Groups.AltitudeHold,
+                AltitudeHoldStateConstants.Groups.AltitudeHold,
                 SIMCONNECT_EVENT_FLAG.GROUPID_IS_PRIORITY
             );
 
@@ -505,9 +367,9 @@ public sealed class AltitudeHoldService(ILogger<AltitudeHoldService> logger) : I
             // From what I can tell from the SDK, the value is expected to be in the range of -16384 to 16384. TransmitClientEvent expects a uint, so we need to cast it.
             _simConnect?.TransmitClientEvent(
                 SimConnect.SIMCONNECT_OBJECT_ID_USER,
-                AltitudeHoldState.Events.SetAileronTrim,
+                AltitudeHoldStateConstants.Events.SetAileronTrim,
                 (uint)normalizedAileronTrimOutput,
-                AltitudeHoldState.Groups.AltitudeHold,
+                AltitudeHoldStateConstants.Groups.AltitudeHold,
                 SIMCONNECT_EVENT_FLAG.GROUPID_IS_PRIORITY
             );
         }
