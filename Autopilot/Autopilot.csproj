@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <SimConnectDllPath>C:\MSFS 2024 SDK\SimConnect SDK\lib\managed\Microsoft.FlightSimulator.SimConnect.dll</SimConnectDllPath>
+    <SimConnectNativeDllPath>C:\MSFS 2024 SDK\SimConnect SDK\lib\SimConnect.dll</SimConnectNativeDllPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SimConnectRuntimeFiles Include="$(SimConnectDllPath)" Condition="Exists('$(SimConnectDllPath)')" />
+    <SimConnectRuntimeFiles Include="$(SimConnectNativeDllPath)" Condition="Exists('$(SimConnectNativeDllPath)')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.FlightSimulator.SimConnect">
+      <HintPath>$(SimConnectDllPath)</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
+  </ItemGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <Target Name="CopySimConnectDllsToOutput" AfterTargets="Build">
+    <Copy SourceFiles="@(SimConnectRuntimeFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopySimConnectDllsToPublish" AfterTargets="Publish">
+    <Copy SourceFiles="@(SimConnectRuntimeFiles)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

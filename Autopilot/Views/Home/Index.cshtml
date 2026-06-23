@@ -1,0 +1,137 @@
+﻿@model Autopilot.Models.AltitudeHold.SimulatorState
+
+@{
+    ViewData["Title"] = "Home Page";
+}
+
+<div class="text-center simconnect-panel">
+    <h1 class="display-5">SimConnect Status</h1>
+    <p class="text-muted">Live connection state between this app and Flight Simulator.</p>
+
+    <div class="status-indicator" id="status-container"
+         data-connected="false">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="status-text">Disconnected</span>
+    </div>
+
+    <p class="small text-muted mt-2">
+        Last checked: <span id="last-updated">Never</span>
+    </p>
+
+    <!-- #region -->
+    <div class="sim-state-details mt-4">
+        <h2 class="h4">Simulator State</h2>
+        <ul class="list-group">
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Simulation Running
+                <span class="badge bg-primary rounded-pill" id="simulation-running">No value</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Altitude
+                <span class="badge bg-primary rounded-pill" id="altitude-value">No value</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Throttle Position
+                <span class="badge bg-primary rounded-pill" id="throttle-value">No value</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Elevator Trim Position
+                <span class="badge bg-primary rounded-pill" id="elevator-trim-value">No value</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Aileron Trim Position
+                <span class="badge bg-primary rounded-pill" id="aileron-trim-value">No value</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Airspeed
+                <span class="badge bg-primary rounded-pill" id="airspeed-value">No value</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Target climb angle
+                <span class="badge bg-primary rounded-pill" id="target-climb-angle-value">No value</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Climb angle
+                <span class="badge bg-primary rounded-pill" id="climb-angle-value">No value</span>
+            </li>
+        </ul>
+        <h2 class="h4 mt-4">Altitude Hold</h2>
+        <ul class="list-group">
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Active
+                <input action="toggle-altitude-hold" type="checkbox" id="altitude-hold-active" data-toggle="toggle"
+                       data-on="Yes" data-off="No">
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center no-wrap">
+                Target Altitude
+                <input type="number" class="form-control form-control-sm" id="altitude-hold-target"
+                       placeholder="Enter target altitude" min="0" step="100">
+            </li>
+        </ul>
+        <h2 class="h4 mt-4">Graphs</h2>
+        <canvas id="altitude-graph" width="400" height="200"></canvas>
+        <canvas id="climb-angle-graph" width="400" height="200" class="mt-4"></canvas>
+        <h2 class="h4 mt-4">PID Parameters</h2>
+        <h3 class="h4 mt-4">Elevator Trim</h3>
+        <ul class="list-group">
+            <li class="list-group-item d-flex justify-content-between align-items-center no-wrap">
+                <span>Kp</span>
+                <input type="number" class="form-control form-control-sm w-25 ms-auto" id="elevator-trim-kp" placeholder="Proportional gain" step="0.1">
+                <span class="ms-2">x 1e-4</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center no-wrap">
+                <span>Ki</span>
+                <input type="number" class="form-control form-control-sm w-25 ms-auto" id="elevator-trim-ki" placeholder="Integral gain" step="0.1">
+                <span class="ms-2">x 1e-4</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center no-wrap">
+                <span>Kd</span>
+                <input type="number" class="form-control form-control-sm w-25 ms-auto" id="elevator-trim-kd" placeholder="Derivative gain" step="0.1">
+                <span class="ms-2">x 1e-4</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Proportional Output
+                <span class="badge bg-primary rounded-pill" id="elevator-trim-proportional-term">No value</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Integral Output
+                <span class="badge bg-primary rounded-pill" id="elevator-trim-integral-term">No value</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Derivative Output
+                <span class="badge bg-primary rounded-pill" id="elevator-trim-derivative-term">No value</span>
+            </li>
+        </ul>
+        <h3 class="h4 mt-4">Aileron Trim PID</h3>
+        <ul class="list-group">
+            <li class="list-group-item d-flex justify-content-between align-items-center no-wrap">
+                <span>Kp</span>
+                <input type="number" class="form-control form-control-sm w-25 ms-auto" id="aileron-trim-kp" placeholder="Proportional gain" step="0.1">
+                <span class="ms-2">x 1e-4</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center no-wrap">
+                <span>Ki</span>
+                <input type="number" class="form-control form-control-sm w-25 ms-auto" id="aileron-trim-ki" placeholder="Integral gain" step="0.1">
+                <span class="ms-2">x 1e-4</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center no-wrap">
+                <span>Kd</span>
+                <input type="number" class="form-control form-control-sm w-25 ms-auto" id="aileron-trim-kd" placeholder="Derivative gain" step="0.1">
+                <span class="ms-2">x 1e-4</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Proportional Output
+                <span class="badge bg-primary rounded-pill" id="aileron-trim-proportional-term">No value</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Integral Output
+                <span class="badge bg-primary rounded-pill" id="aileron-trim-integral-term">No value</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Derivative Output
+                <span class="badge bg-primary rounded-pill" id="aileron-trim-derivative-term">No value</span>
+            </li>
+        </ul>
+    </div>
+    <!-- #endregion -->
+</div>
